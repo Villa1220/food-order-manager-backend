@@ -3,9 +3,11 @@ import { app } from "./app.js";
 import { config } from "./config.js";
 import { pool } from "./db/pool.js";
 import { attachSocket } from "./socket.js";
+import { setIo } from "./realtime.js";
 
 const httpServer = createServer(app);
 const io = attachSocket(httpServer);
+setIo(io);
 
 io.on("connection", (socket) => {
   socket.join("kitchen");

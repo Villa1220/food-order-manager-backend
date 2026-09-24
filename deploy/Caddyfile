@@ -1,0 +1,11 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$API_HOST} {
+	reverse_proxy backend:4000
+}
+
+{$N8N_HOST} {
+	reverse_proxy n8n:5678
+}

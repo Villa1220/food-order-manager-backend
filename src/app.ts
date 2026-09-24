@@ -1,8 +1,12 @@
 import cors from "cors";
 import express from "express";
+import path from "node:path";
 import { googleLogin } from "./auth/google.js";
 import { config } from "./config.js";
-import { pingDatabase, pool } from "./db/pool.js";
+import { pingDatabase } from "./db/pool.js";
+import { menuRouter } from "./routes/menu.js";
+import { ordersRouter } from "./routes/orders.js";
+import { paymentsRouter } from "./routes/payments.js";
 
 export const app = express();
 
@@ -11,7 +15,8 @@ app.use(
     origin: config.frontendOrigin,
   }),
 );
-app.use(express.json());
+app.use(express.json({ limit: "8mb" }));
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.post("/api/auth/google", (req, res, next) => {
   void googleLogin(req, res).catch(next);
@@ -37,19 +42,21 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-app.get("/api/orders", async (_req, res) => {
-  const result = await pool.query(
-    `SELECT id, order_code, channel, status, table_number, received_at
-     FROM orders
-     ORDER BY received_at DESC
-     LIMIT 50`,
-  );
-  res.json({ orders: result.rows });
-});
+app.use("/api/menu", menuRouter);
+app.use("/api/orders", ordersRouter);
+app.use("/api/payments", paymentsRouter);
 
 app.use(
   (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error(err);
-    res.status(500).json({ error: "Error interno del servidor." });
+    const status =
+      typeof (err as { status?: unknown })?.status === "number"
+        ? (err as { status: number }).status
+        : 500;
+    const message =
+      status < 500 && err instanceof Error
+        ? err.message
+        : "Error interno del servidor.";
+    if (status >= 500) console.error(err);
+    res.status(status).json({ error: message });
   },
 );

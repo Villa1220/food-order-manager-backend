@@ -53,6 +53,10 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
+    CREATE TYPE order_item_status AS ENUM ('pendiente', 'listo');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
     CREATE TYPE payment_method AS ENUM
         ('efectivo', 'tarjeta', 'transferencia', 'otro');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -209,6 +213,9 @@ CREATE TABLE IF NOT EXISTS order_items (
     unit_price    NUMERIC(8,2) NOT NULL,           -- snapshot del precio al momento del pedido
     quantity      INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
     notes         TEXT,
+    status        order_item_status NOT NULL DEFAULT 'pendiente',
+    ready_count   INT NOT NULL DEFAULT 0 CHECK (ready_count >= 0 AND ready_count <= quantity),
+    ready_at      TIMESTAMPTZ, -- se detiene cuando todas las unidades del plato están marcadas
     line_total    NUMERIC(10,2) GENERATED ALWAYS AS (unit_price * quantity) STORED,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -255,6 +262,19 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id);
+
+-- Plato y cantidad que entraron en cada cuenta. El precio ya incluye IVA.
+CREATE TABLE IF NOT EXISTS payment_lines (
+    id             SERIAL PRIMARY KEY,
+    payment_id     INT NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+    order_item_id  INT NOT NULL REFERENCES order_items(id),
+    item_name      VARCHAR(120) NOT NULL,
+    quantity       INT NOT NULL CHECK (quantity > 0),
+    unit_price     NUMERIC(8,2) NOT NULL,
+    line_total     NUMERIC(10,2) GENERATED ALWAYS AS (unit_price * quantity) STORED
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_lines_payment_id ON payment_lines(payment_id);
 
 -- Auditoria especifica de pagos: quien edito un monto, cuando y por que.
 CREATE TABLE IF NOT EXISTS payment_events (
